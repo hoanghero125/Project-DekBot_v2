@@ -60,6 +60,7 @@ const Icons = {
     YOUTUBE:    '📺',
     COMMAND:    '🤖',
     MEOW:      '🐱',
+    LEAVE:     '👋',
 
     // Progress bar parts
     BAR_START_FULL:  '▰',

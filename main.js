@@ -50,12 +50,27 @@ client.distube = new DisTube(client, {
 musicPlugin.distube = client.distube;
 client.musicPlugin = musicPlugin; // Expose plugin for stop/cancel access
 
+// Auto-leave timers: guildId -> setTimeout handle
+const leaveTimers = new Map();
+const LEAVE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+
+// Alone-in-VC timers: guildId -> setTimeout handle
+const aloneTimers = new Map();
+const ALONE_TIMEOUT = 3 * 60 * 1000; // 3 minutes
+
 // DisTube events — rich embed responses
 client.distube
     .on('initQueue', (queue) => {
         console.log(`[DisTube] Joined voice channel: #${queue.voiceChannel.name}`);
     })
     .on('playSong', (queue, song) => {
+        // Cancel any pending auto-leave timer since we're playing again
+        const existingTimer = leaveTimers.get(queue.id);
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+            leaveTimers.delete(queue.id);
+        }
+
         console.log(`[DisTube] Playing: "${song.name}" (${song.formattedDuration})`);
         const source = detectSource(song.url);
 
@@ -110,11 +125,38 @@ client.distube
     })
     .on('finish', (queue) => {
         console.log('[DisTube] Queue finished');
-        const embed = infoEmbed(`${Icons.MUSIC_DISC}  Queue finished — no more songs to play.\nUse \`/play\` to start a new session!`);
+        const embed = infoEmbed(`${Icons.MUSIC_DISC}  Queue finished — no more songs to play.\nUse \`/play\` to start a new session!\n${Icons.CLOCK}  Leaving voice in **5 minutes** if idle.`);
         queue.textChannel.send({ embeds: [embed] });
+
+        // Start a 5-minute auto-leave timer
+        const timer = setTimeout(() => {
+            leaveTimers.delete(queue.id);
+            const currentQueue = client.distube.getQueue(queue.id);
+            if (!currentQueue) {
+                // No active queue — leave the voice channel
+                const vc = queue.voiceChannel;
+                if (vc) {
+                    client.distube.voices.leave(vc.guild.id);
+                    console.log(`[DisTube] Auto-left voice channel after 5m idle`);
+                    queue.textChannel.send({ embeds: [infoEmbed(`${Icons.LEAVE}  Left the voice channel after 5 minutes of inactivity.`)] }).catch(() => {});
+                }
+            }
+        }, LEAVE_TIMEOUT);
+        leaveTimers.set(queue.id, timer);
     })
     .on('disconnect', (queue) => {
         console.log('[DisTube] Disconnected from voice channel');
+        // Clean up any pending timers for this guild
+        const timer = leaveTimers.get(queue.id);
+        if (timer) {
+            clearTimeout(timer);
+            leaveTimers.delete(queue.id);
+        }
+        const aloneTimer = aloneTimers.get(queue.id);
+        if (aloneTimer) {
+            clearTimeout(aloneTimer);
+            aloneTimers.delete(queue.id);
+        }
     })
     .on('error', (error, queue) => {
         console.error('[DisTube] Error:', error.message);
@@ -126,6 +168,81 @@ client.distube
 // Bot ready
 client.once(Events.ClientReady, () => {
     console.log(`DekBot has gone online :D — ${client.user.tag}`);
+});
+
+// Auto-leave when bot is alone in a voice channel for 3 minutes
+// Also pause/resume when the bot is server-muted/unmuted
+const mutePausedGuilds = new Set(); // track guilds where we paused due to mute
+
+client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+    const guild = oldState.guild || newState.guild;
+    const botId = guild.members.me?.id;
+
+    // --- Server mute/unmute detection (bot's own voice state changed) ---
+    if (newState.id === botId) {
+        const wasMuted = oldState.serverMute;
+        const isMuted = newState.serverMute;
+        const guildId = guild.id;
+
+        if (!wasMuted && isMuted) {
+            // Bot just got server-muted — pause playback
+            const queue = client.distube.getQueue(guildId);
+            if (queue && !queue.paused) {
+                queue.pause();
+                mutePausedGuilds.add(guildId);
+                console.log(`[DisTube] Bot was server-muted — pausing playback`);
+                queue.textChannel.send({ embeds: [warningEmbed(`${Icons.PAUSE}  I've been muted! Pausing playback until I'm unmuted.`)] }).catch(() => {});
+            }
+        } else if (wasMuted && !isMuted) {
+            // Bot just got unmuted — resume if we paused it
+            const queue = client.distube.getQueue(guildId);
+            if (queue && queue.paused && mutePausedGuilds.has(guildId)) {
+                queue.resume();
+                mutePausedGuilds.delete(guildId);
+                console.log(`[DisTube] Bot was unmuted — resuming playback`);
+                queue.textChannel.send({ embeds: [successEmbed(`${Icons.PLAY}  Unmuted! Resuming playback.`)] }).catch(() => {});
+            }
+        }
+    }
+
+    // --- Alone-in-VC detection ---
+    const botVoice = guild.members.me?.voice?.channel;
+    if (!botVoice) return;
+
+    // Count human members in the bot's VC (exclude bots)
+    const humans = botVoice.members.filter(m => !m.user.bot).size;
+    const guildId = guild.id;
+
+    if (humans === 0) {
+        // Bot is alone — start the 3-minute timer if not already running
+        if (!aloneTimers.has(guildId)) {
+            console.log(`[DisTube] Bot is alone in #${botVoice.name}, starting 3m auto-leave timer`);
+            const timer = setTimeout(() => {
+                aloneTimers.delete(guildId);
+                // Re-check: still alone?
+                const vc = guild.members.me?.voice?.channel;
+                if (vc && vc.members.filter(m => !m.user.bot).size === 0) {
+                    const queue = client.distube.getQueue(guildId);
+                    if (queue) {
+                        client.musicPlugin?.cancelBackgroundLoading(guildId);
+                        queue.textChannel.send({ embeds: [infoEmbed(`${Icons.LEAVE}  No one in the voice channel — stopped playback and left after 3 minutes.`)] }).catch(() => {});
+                        queue.stop().catch(() => {});
+                    }
+                    client.distube.voices.leave(guildId);
+                    console.log(`[DisTube] Auto-left #${vc.name} — alone for 3 minutes`);
+                }
+            }, ALONE_TIMEOUT);
+            aloneTimers.set(guildId, timer);
+        }
+    } else {
+        // Someone is here — cancel the alone timer
+        const timer = aloneTimers.get(guildId);
+        if (timer) {
+            clearTimeout(timer);
+            aloneTimers.delete(guildId);
+            console.log(`[DisTube] Alone timer cancelled — someone joined #${botVoice.name}`);
+        }
+    }
 });
 
 // Button interaction handler (skip button on Now Playing, queue pagination)

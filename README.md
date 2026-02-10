@@ -40,7 +40,7 @@ yt-dlp is downloaded automatically on first run (managed by `@distube/yt-dlp`).
 1. **Clone and install**
 
    ```bash
-   git clone https://github.com/your-username/Project-DekBot_v2.git
+   git clone https://github.com/hoanghero125/Project-DekBot_v2.git
    cd Project-DekBot_v2
    npm install
    ```
