@@ -23,6 +23,7 @@ module.exports = {
         // Cancel any background playlist loading before stopping
         client.musicPlugin?.cancelBackgroundLoading(interaction.guildId);
         await queue.stop();
+        client.distube.voices.leave(interaction.guildId);
         await interaction.reply({
             embeds: [successEmbed(`${Icons.STOP}  Stopped playback and cleared **${songCount}** song${songCount === 1 ? '' : 's'} from the queue.`)],
         });
@@ -43,6 +44,7 @@ module.exports = {
         // Cancel any background playlist loading before stopping
         client.musicPlugin?.cancelBackgroundLoading(message.guildId);
         await queue.stop();
+        client.distube.voices.leave(message.guildId);
         message.channel.send({
             embeds: [successEmbed(`${Icons.STOP}  Stopped playback and cleared **${songCount}** song${songCount === 1 ? '' : 's'} from the queue.`)],
         });
