@@ -6,7 +6,7 @@ Supports **YouTube**, **Spotify**, **Apple Music**, **SoundCloud**, and [700+ ot
 
 ## Features
 
-### 🎵 Music
+### Music
 - Play songs via URL or search query from YouTube, Spotify, Apple Music, SoundCloud, and 700+ more sites
 - Full queue management — play, skip, stop, view queue
 - YouTube playlist & radio/mix support (auto-capped at 25 tracks for infinite mixes)
@@ -15,11 +15,11 @@ Supports **YouTube**, **Spotify**, **Apple Music**, **SoundCloud**, and [700+ ot
 - Scored best-match search — picks the most accurate YouTube result for Spotify/Apple Music tracks
 - Full song names, thumbnails, durations, requester info, and platform icons in all embeds
 
-### 🎮 Utilities
+### Utilities
 - Minecraft server status lookup with player count bar
 - Bot info card with live stats (server count, uptime) and creator portfolio link
 
-### 🤖 Bot UX
+### Bot UX
 - Dual interface: slash commands (`/play`, `/skip`, …) and prefix commands (`^play`, `^skip`, …)
 - Consistent branded embeds with semantic colors (music pink, success green, error red, warning yellow)
 - Centralized theme system (`utils/theme.js`) — shared color palette, emoji icon kit, embed builders
