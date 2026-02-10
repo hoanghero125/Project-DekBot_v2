@@ -23,6 +23,19 @@ class MusicPlugin extends ExtractorPlugin {
     constructor() {
         super();
         this.distube = null; // Set after DisTube is created
+        this._bgAbort = new Map(); // guildId -> AbortController
+    }
+
+    /**
+     * Cancel any in-progress background playlist loading for a guild.
+     */
+    cancelBackgroundLoading(guildId) {
+        const ac = this._bgAbort.get(guildId);
+        if (ac) {
+            ac.abort();
+            this._bgAbort.delete(guildId);
+            log('plugin', `Background loading cancelled for guild ${guildId}`);
+        }
     }
 
     // --- DisTube interface ---
@@ -139,6 +152,7 @@ class MusicPlugin extends ExtractorPlugin {
                     uploader: v.ownerText?.runs?.[0]?.text || '',
                     channel: v.ownerText?.runs?.[0]?.text || '',
                     thumbnail: v.thumbnail?.thumbnails?.slice(-1)[0]?.url || '',
+                    duration: parseDurationText(v.lengthText?.simpleText),
                 });
                 if (results.length >= count) return results;
             }
@@ -334,10 +348,12 @@ class MusicPlugin extends ExtractorPlugin {
 
         // Detect YouTube radio/mix playlists (list=RD...) and cap them at 25 tracks.
         // These are auto-generated infinite playlists that can expand to 1000+ entries.
+        const isYouTube = /youtu\.?be/.test(url);
         const isRadio = /[?&]list=RD/.test(url) || /[?&]start_radio=1/.test(url);
         const isPlaylist = /[?&]list=/.test(url) || /\/playlist\b/.test(url) || /\/album\b/.test(url) || /\/sets\//.test(url);
         const flags = {};
-        if (isPlaylist) {
+        // Only use --flat-playlist for YouTube (other sources like SoundCloud lose metadata with it)
+        if (isPlaylist && isYouTube) {
             flags['flat-playlist'] = true;
         }
         if (isRadio) {
@@ -387,12 +403,25 @@ class MusicPlugin extends ExtractorPlugin {
 
         const guildId = member.guild.id;
 
+        // Cancel any previous background load for this guild
+        this.cancelBackgroundLoading(guildId);
+
+        // Create a new AbortController for this loading session
+        const ac = new AbortController();
+        this._bgAbort.set(guildId, ac);
+
         // Run async without blocking
         (async () => {
             let loaded = 0;
             let failed = 0;
 
             for (let i = 0; i < remainingTracks.length; i++) {
+                // Check if loading was cancelled (e.g. by /stop)
+                if (ac.signal.aborted) {
+                    log(source, `  Background loading aborted after ${loaded} songs`);
+                    break;
+                }
+
                 const t = remainingTracks[i];
                 const { name, artist } = extractInfo(t);
                 const idx = i + 2; // +2 because first track was index 1
@@ -403,6 +432,12 @@ class MusicPlugin extends ExtractorPlugin {
                         ? await this._searchBestMatch(artist, name, options)
                         : await this.searchSong(cleanQuery(name), options);
 
+                    // Re-check abort after the async search
+                    if (ac.signal.aborted) {
+                        log(source, `  Background loading aborted after ${loaded} songs`);
+                        break;
+                    }
+
                     if (ytSong) {
                         ytSong.name = artist ? `${name} - ${artist}` : name;
 
@@ -412,12 +447,9 @@ class MusicPlugin extends ExtractorPlugin {
                             queue.addToQueue(ytSong);
                             loaded++;
                         } else {
-                            // Queue was stopped, play as new queue
-                            await distube.play(voiceChannel, ytSong.url, {
-                                textChannel,
-                                member,
-                            });
-                            loaded++;
+                            // Queue was stopped — don't start a new one, just stop
+                            log(source, `  Queue no longer exists, stopping background load`);
+                            break;
                         }
                     } else {
                         failed++;
@@ -426,6 +458,14 @@ class MusicPlugin extends ExtractorPlugin {
                     log(source, `  [${idx}/${totalCount}] Failed: ${e.message}`);
                     failed++;
                 }
+            }
+
+            // Clean up the abort controller
+            this._bgAbort.delete(guildId);
+
+            if (ac.signal.aborted) {
+                log(source, `Background loading was cancelled. ${loaded} songs were loaded before cancellation.`);
+                return;
             }
 
             log(source, `Background loading complete: ${loaded} loaded, ${failed} failed out of ${remainingTracks.length}`);
@@ -440,6 +480,7 @@ class MusicPlugin extends ExtractorPlugin {
                 textChannel.send({ embeds: [embed] }).catch(() => {});
             }
         })().catch(e => {
+            this._bgAbort.delete(guildId);
             log(source, `Background loading error: ${e.message}`);
         });
     }
@@ -566,6 +607,17 @@ function formatDuration(seconds) {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Parse a YouTube duration string like "3:45" or "1:02:30" into seconds.
+ */
+function parseDurationText(text) {
+    if (!text) return 0;
+    const parts = text.split(':').map(Number);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return parts[0] || 0;
 }
 
 module.exports = { MusicPlugin };
