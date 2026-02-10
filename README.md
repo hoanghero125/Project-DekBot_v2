@@ -2,22 +2,24 @@
 
 A Discord music bot with multi-platform support, built with discord.js v14 and DisTube v5.
 
-Supports **YouTube**, **Spotify**, **SoundCloud**, **Apple Music**, and [700+ other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) via yt-dlp.
+Supports **YouTube**, **Spotify**, **Apple Music**, **SoundCloud**, and [700+ other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) via yt-dlp.
 
 ## Features
 
 - Slash commands (`/play`, `/skip`, etc.) and prefix commands (`^play`, `^skip`, etc.)
 - Music playback with queue management (play, skip, stop, queue display)
-- Spotify and SoundCloud link resolution
+- Multi-platform link support: YouTube, Spotify, Apple Music, SoundCloud, and more
+- YouTube playlist support
 - Minecraft server status lookup
 - Configurable via `.env`
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) v18+
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp#installation) installed and available in PATH
 - [FFmpeg](https://ffmpeg.org/) (bundled via `ffmpeg-static`, no manual install needed)
 - A [Discord bot application](https://discord.com/developers/applications) with a bot token
+
+yt-dlp is downloaded automatically on first run (managed by `@distube/yt-dlp`).
 
 ## Setup
 
@@ -46,8 +48,6 @@ Supports **YouTube**, **Spotify**, **SoundCloud**, **Apple Music**, and [700+ ot
 
    `GUILD_ID` registers slash commands instantly to that server (good for development). Remove it to register global commands instead (takes up to an hour to propagate).
 
-   Spotify credentials are optional -- Spotify links will still work without them, but rate limits may apply.
-
 3. **Register slash commands**
 
    ```bash
@@ -72,6 +72,17 @@ Supports **YouTube**, **Spotify**, **SoundCloud**, **Apple Music**, and [700+ ot
 | `/mcsv <ip> <port>` | `^mcsv` | Check a Minecraft server's status |
 | `/youtube` | `^youtube` | Show the creator's YouTube channel |
 
+## How music resolution works
+
+The bot uses a custom `MusicPlugin` that routes URLs to the right handler:
+
+- **YouTube URLs** and **text searches** go directly through yt-dlp
+- **Spotify links** are resolved via `spotify-url-info` to get track metadata, then searched on YouTube
+- **Apple Music links** are resolved via the iTunes API to get track metadata, then searched on YouTube
+- **All other URLs** (SoundCloud, Bandcamp, etc.) go through yt-dlp, which supports 700+ sites
+
+No Spotify API credentials are needed for single tracks and small playlists.
+
 ## Project Structure
 
 ```
@@ -84,15 +95,15 @@ Project-DekBot_v2
 │  ├─ skip.js
 │  ├─ stop.js
 │  └─ youtube.js
+├─ plugins
+│  └─ music-plugin.js
 ├─ deploy-commands.js
-├─ LICENSE
 ├─ main.js
-├─ package-lock.json
 ├─ package.json
+├─ LICENSE
 └─ README.md
 ```
 
 ## License
 
 [MIT](LICENSE)
-

@@ -20,10 +20,15 @@ module.exports = {
         const query = interaction.options.getString('query');
         await interaction.reply(`Searching for **${query}**...`);
 
-        await client.distube.play(voiceChannel, query, {
-            textChannel: interaction.channel,
-            member: interaction.member,
-        });
+        try {
+            await client.distube.play(voiceChannel, query, {
+                textChannel: interaction.channel,
+                member: interaction.member,
+            });
+        } catch (e) {
+            console.error(e);
+            await interaction.followUp({ content: `Could not play: ${e.message}` });
+        }
     },
 
     async prefixExecute(message, args, client) {
@@ -36,10 +41,15 @@ module.exports = {
         }
 
         const query = args.join(' ');
-        await client.distube.play(voiceChannel, query, {
-            textChannel: message.channel,
-            member: message.member,
-            message: message,
-        });
+        try {
+            await client.distube.play(voiceChannel, query, {
+                textChannel: message.channel,
+                member: message.member,
+                message: message,
+            });
+        } catch (e) {
+            console.error(e);
+            message.channel.send(`Could not play: ${e.message}`);
+        }
     },
 };
