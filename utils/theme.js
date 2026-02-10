@@ -68,7 +68,7 @@ const Icons = {
 
 // ─── Bot Branding ────────────────────────────────────────────────
 const BOT_NAME = 'DekBot';
-const BOT_FOOTER = `${BOT_NAME} v2  •  Made with ${Icons.HEART} by DekTheDev`;
+const BOT_FOOTER = `${BOT_NAME} [v2]  •  Made with ${Icons.HEART} by DekTheDev`;
 const BOT_ICON = null; // Set to a URL string if you have a bot avatar URL
 
 // ─── Embed Builder Helpers ───────────────────────────────────────

@@ -48,6 +48,7 @@ client.distube = new DisTube(client, {
 });
 // Give the plugin a reference to DisTube for background playlist loading
 musicPlugin.distube = client.distube;
+client.musicPlugin = musicPlugin; // Expose plugin for stop/cancel access
 
 // DisTube events — rich embed responses
 client.distube
@@ -124,49 +125,65 @@ client.distube
 
 // Bot ready
 client.once(Events.ClientReady, () => {
-    console.log(`DekBot online — ${client.user.tag}`);
+    console.log(`DekBot has gone online :D — ${client.user.tag}`);
 });
 
-// Button interaction handler (skip button on Now Playing)
+// Button interaction handler (skip button on Now Playing, queue pagination)
 client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isButton()) return;
-    if (interaction.customId !== 'skip_song') return;
 
-    const member = interaction.member;
-    if (!member.voice.channel) {
-        return interaction.reply({ embeds: [errorEmbed('You must be in a voice channel to skip!')], ephemeral: true });
-    }
-
-    const queue = client.distube.getQueue(interaction.guildId);
-    if (!queue) {
-        return interaction.reply({ embeds: [warningEmbed('Nothing is playing right now.')], ephemeral: true });
-    }
-
-    try {
-        const skippedName = queue.songs[0]?.name;
-
-        // Disable the button on the original message
-        const disabledRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('skip_song')
-                .setLabel('Skipped')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('⏭️')
-                .setDisabled(true),
-        );
-        await interaction.update({ components: [disabledRow] });
-
-        if (queue.songs.length <= 1) {
-            await queue.stop();
-            await interaction.followUp({ embeds: [infoEmbed(`${Icons.SKIP}  Skipped **${skippedName}** — queue is now empty.`)] });
-        } else {
-            const nextName = queue.songs[1]?.name;
-            await queue.skip();
-            await interaction.followUp({ embeds: [successEmbed(`${Icons.SKIP}  Skipped **${skippedName}**\n${Icons.PLAY}  Now playing **${nextName}**`)] });
+    // --- Skip button ---
+    if (interaction.customId === 'skip_song') {
+        const member = interaction.member;
+        if (!member.voice.channel) {
+            return interaction.reply({ embeds: [errorEmbed('You must be in a voice channel to skip!')], ephemeral: true });
         }
-    } catch (e) {
-        console.error('[Button] Skip error:', e.message);
-        await interaction.followUp({ embeds: [errorEmbed('Failed to skip the song.')], ephemeral: true });
+
+        const queue = client.distube.getQueue(interaction.guildId);
+        if (!queue) {
+            return interaction.reply({ embeds: [warningEmbed('Nothing is playing right now.')], ephemeral: true });
+        }
+
+        try {
+            const skippedName = queue.songs[0]?.name;
+
+            const disabledRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('skip_song')
+                    .setLabel('Skipped')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('⏭️')
+                    .setDisabled(true),
+            );
+            await interaction.update({ components: [disabledRow] });
+
+            if (queue.songs.length <= 1) {
+                await queue.stop();
+                await interaction.followUp({ embeds: [infoEmbed(`${Icons.SKIP}  Skipped **${skippedName}** — queue is now empty.`)] });
+            } else {
+                const nextName = queue.songs[1]?.name;
+                await queue.skip();
+                await interaction.followUp({ embeds: [successEmbed(`${Icons.SKIP}  Skipped **${skippedName}**\n${Icons.PLAY}  Now playing **${nextName}**`)] });
+            }
+        } catch (e) {
+            console.error('[Button] Skip error:', e.message);
+            await interaction.followUp({ embeds: [errorEmbed('Failed to skip the song.')], ephemeral: true });
+        }
+        return;
+    }
+
+    // --- Queue pagination ---
+    if (interaction.customId.startsWith('queue_page_')) {
+        const page = parseInt(interaction.customId.replace('queue_page_', ''), 10);
+        const queue = client.distube.getQueue(interaction.guildId);
+        if (!queue) {
+            return interaction.update({ embeds: [warningEmbed('The queue is no longer active.')], components: [] });
+        }
+
+        const { buildQueuePage } = require('./commands/queue');
+        const { embed, row } = buildQueuePage(queue, page);
+        await interaction.update({ embeds: [embed], components: row ? [row] : [] });
+        return;
     }
 });
 

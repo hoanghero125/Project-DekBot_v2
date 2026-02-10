@@ -1,5 +1,7 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { Icons, Colors, musicEmbed, warningEmbed, formatDuration, BOT_FOOTER } = require('../utils/theme');
+
+const SONGS_PER_PAGE = 10;
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -14,8 +16,8 @@ module.exports = {
             return interaction.reply({ embeds: [warningEmbed('Nothing is playing right now.')], ephemeral: true });
         }
 
-        const embed = buildQueueEmbed(queue);
-        await interaction.reply({ embeds: [embed] });
+        const { embed, row } = buildQueuePage(queue, 0);
+        await interaction.reply({ embeds: [embed], components: row ? [row] : [] });
     },
 
     async prefixExecute(message, args, client) {
@@ -24,15 +26,25 @@ module.exports = {
             return message.channel.send({ embeds: [warningEmbed('Nothing is playing right now.')] });
         }
 
-        const embed = buildQueueEmbed(queue);
-        message.channel.send({ embeds: [embed] });
+        const { embed, row } = buildQueuePage(queue, 0);
+        message.channel.send({ embeds: [embed], components: row ? [row] : [] });
     },
+
+    // Exported for use by the button handler in main.js
+    buildQueuePage,
+    SONGS_PER_PAGE,
 };
 
-function buildQueueEmbed(queue) {
+function buildQueuePage(queue, page) {
     const current = queue.songs[0];
-    const upcoming = queue.songs.slice(1, 10);
+    const upcoming = queue.songs.slice(1); // all songs after current
+    const totalPages = Math.max(1, Math.ceil(upcoming.length / SONGS_PER_PAGE));
+    const safePage = Math.min(Math.max(0, page), totalPages - 1);
 
+    const start = safePage * SONGS_PER_PAGE;
+    const pageItems = upcoming.slice(start, start + SONGS_PER_PAGE);
+
+    // Now playing section
     const nowPlaying = [
         `${Icons.MUSIC_DISC}  **[${current.name}](${current.url})**`,
         `${Icons.CLOCK}  \`${current.formattedDuration || formatDuration(current.duration)}\``,
@@ -48,10 +60,12 @@ function buildQueueEmbed(queue) {
         embed.setThumbnail(current.thumbnail);
     }
 
-    if (upcoming.length > 0) {
-        const list = upcoming
+    // Up next list for this page
+    if (pageItems.length > 0) {
+        const list = pageItems
             .map((song, i) => {
-                const num = `\`${String(i + 1).padStart(2, ' ')}\``;
+                const globalIdx = start + i + 1;
+                const num = `\`${String(globalIdx).padStart(2, ' ')}\``;
                 return `${num}  **${song.name}** — \`${song.formattedDuration}\``;
             })
             .join('\n');
@@ -59,19 +73,47 @@ function buildQueueEmbed(queue) {
         embed.addFields({ name: `\u200b\n${Icons.QUEUE}  Up Next`, value: list, inline: false });
     }
 
-    // Summary footer
+    // Footer with totals and page info
     const totalSongs = queue.songs.length;
     const totalDuration = queue.songs.reduce((acc, s) => acc + (s.duration || 0), 0);
     const footerParts = [
         `${totalSongs} song${totalSongs === 1 ? '' : 's'}`,
         `${formatDuration(totalDuration)} total`,
     ];
-
-    if (totalSongs > 11) {
-        footerParts.push(`+${totalSongs - 11} more`);
+    if (totalPages > 1) {
+        footerParts.push(`Page ${safePage + 1}/${totalPages}`);
     }
-
     embed.setFooter({ text: `${footerParts.join('  •  ')}  │  ${BOT_FOOTER}` });
 
-    return embed;
+    // Pagination buttons
+    let row = null;
+    if (totalPages > 1) {
+        const buttons = [];
+
+        if (safePage > 0) {
+            buttons.push(
+                new ButtonBuilder()
+                    .setCustomId(`queue_page_${safePage - 1}`)
+                    .setLabel('Previous')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('◀️'),
+            );
+        }
+
+        if (safePage < totalPages - 1) {
+            buttons.push(
+                new ButtonBuilder()
+                    .setCustomId(`queue_page_${safePage + 1}`)
+                    .setLabel('Next')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('▶️'),
+            );
+        }
+
+        if (buttons.length) {
+            row = new ActionRowBuilder().addComponents(...buttons);
+        }
+    }
+
+    return { embed, row };
 }

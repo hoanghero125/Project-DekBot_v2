@@ -20,6 +20,8 @@ module.exports = {
         }
 
         const songCount = queue.songs.length;
+        // Cancel any background playlist loading before stopping
+        client.musicPlugin?.cancelBackgroundLoading(interaction.guildId);
         await queue.stop();
         await interaction.reply({
             embeds: [successEmbed(`${Icons.STOP}  Stopped playback and cleared **${songCount}** song${songCount === 1 ? '' : 's'} from the queue.`)],
@@ -38,6 +40,8 @@ module.exports = {
         }
 
         const songCount = queue.songs.length;
+        // Cancel any background playlist loading before stopping
+        client.musicPlugin?.cancelBackgroundLoading(message.guildId);
         await queue.stop();
         message.channel.send({
             embeds: [successEmbed(`${Icons.STOP}  Stopped playback and cleared **${songCount}** song${songCount === 1 ? '' : 's'} from the queue.`)],
