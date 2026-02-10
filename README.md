@@ -1,17 +1,31 @@
 # DekBot v2
 
-A Discord music bot with multi-platform support, built with discord.js v14 and DisTube v5.
+A feature-rich Discord music bot with multi-platform support, rich embed UI, and utility commands — built with **discord.js v14** and **DisTube v5**.
 
 Supports **YouTube**, **Spotify**, **Apple Music**, **SoundCloud**, and [700+ other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) via yt-dlp.
 
 ## Features
 
-- Slash commands (`/play`, `/skip`, etc.) and prefix commands (`^play`, `^skip`, etc.)
-- Music playback with queue management (play, skip, stop, queue display)
-- Multi-platform link support: YouTube, Spotify, Apple Music, SoundCloud, and more
-- YouTube playlist support
-- Minecraft server status lookup
-- Configurable via `.env`
+### 🎵 Music
+- Play songs via URL or search query from YouTube, Spotify, Apple Music, SoundCloud, and 700+ more sites
+- Full queue management — play, skip, stop, view queue
+- YouTube playlist & radio/mix support (auto-capped at 25 tracks for infinite mixes)
+- Spotify track, album, and playlist resolution (no API key needed)
+- Apple Music track and album resolution via iTunes API with page-scraping fallback
+- Scored best-match search — picks the most accurate YouTube result for Spotify/Apple Music tracks
+- Full song names, thumbnails, durations, requester info, and platform icons in all embeds
+
+### 🎮 Utilities
+- Minecraft server status lookup with player count bar
+- Bot info card with live stats (server count, uptime) and creator portfolio link
+
+### 🤖 Bot UX
+- Dual interface: slash commands (`/play`, `/skip`, …) and prefix commands (`^play`, `^skip`, …)
+- Consistent branded embeds with semantic colors (music pink, success green, error red, warning yellow)
+- Centralized theme system (`utils/theme.js`) — shared color palette, emoji icon kit, embed builders
+- Source-aware styling — YouTube red, Spotify green, Apple Music red, SoundCloud orange
+- Timestamps, footers, and thumbnails on every response
+- Graceful error handling with rich error embeds
 
 ## Prerequisites
 
@@ -33,11 +47,7 @@ yt-dlp is downloaded automatically on first run (managed by `@distube/yt-dlp`).
 
 2. **Configure environment**
 
-   Copy the example env file and fill in your values:
-
-   ```bash
-   cp .env.example .env
-   ```
+   Create a `.env` file in the project root:
 
    ```env
    BOT_TOKEN=your_bot_token_here
@@ -67,42 +77,64 @@ yt-dlp is downloaded automatically on first run (managed by `@distube/yt-dlp`).
 | `/play <query>` | `^play`, `^p` | Play a song or add it to the queue. Accepts URLs or search terms. |
 | `/skip` | `^skip`, `^s` | Skip the current song |
 | `/stop` | `^stop` | Stop playback and clear the queue |
-| `/queue` | `^queue`, `^q` | Show the current queue |
+| `/queue` | `^queue`, `^q` | Show the current music queue |
 | `/help` | `^help` | List all commands |
 | `/mcsv <ip> <port>` | `^mcsv` | Check a Minecraft server's status |
-| `/youtube` | `^youtube` | Show the creator's YouTube channel |
+| `/info` | `^info` | Show bot info, stats, and creator portfolio |
 
-## How music resolution works
+## How Music Resolution Works
 
-The bot uses a custom `MusicPlugin` that routes URLs to the right handler:
+The bot uses a custom `MusicPlugin` (`plugins/music-plugin.js`) that routes URLs to the right handler:
 
-- **YouTube URLs** and **text searches** go directly through yt-dlp
-- **Spotify links** are resolved via `spotify-url-info` to get track metadata, then searched on YouTube
-- **Apple Music links** are resolved via the iTunes API to get track metadata, then searched on YouTube
-- **All other URLs** (SoundCloud, Bandcamp, etc.) go through yt-dlp, which supports 700+ sites
+| Source | Method |
+|--------|--------|
+| **YouTube URLs & text searches** | Direct yt-dlp resolution |
+| **YouTube playlists & mixes** | yt-dlp with flat-playlist; radio mixes capped at 25 tracks |
+| **Spotify tracks** | `spotify-url-info` → metadata → scored YouTube search |
+| **Spotify albums & playlists** | Each track resolved individually via scored YouTube search |
+| **Apple Music tracks** | iTunes API lookup → scored YouTube search |
+| **Apple Music albums** | iTunes API lookup → per-track scored YouTube search |
+| **Apple Music (fallback)** | Page scraping for `og:title` → YouTube search |
+| **All other URLs** | yt-dlp (supports SoundCloud, Bandcamp, and 700+ sites) |
 
-No Spotify API credentials are needed for single tracks and small playlists.
+**Scored search** scrapes YouTube search results and picks the candidate that best matches the known artist + track name, avoiding mismatches on cover versions or lyric videos.
+
+No Spotify API credentials are needed — `spotify-url-info` extracts metadata without authentication.
 
 ## Project Structure
 
 ```
-Project-DekBot_v2
-├─ commands
-│  ├─ help.js
-│  ├─ mcserver.js
-│  ├─ play.js
-│  ├─ queue.js
-│  ├─ skip.js
-│  ├─ stop.js
-│  └─ youtube.js
-├─ plugins
-│  └─ music-plugin.js
-├─ deploy-commands.js
-├─ main.js
-├─ package.json
-├─ LICENSE
-└─ README.md
+Project-DekBot_v2/
+├── commands/
+│   ├── help.js          # /help — categorized command list
+│   ├── info.js          # /info — bot info & creator portfolio
+│   ├── mcserver.js      # /mcsv — Minecraft server status
+│   ├── play.js          # /play — music playback
+│   ├── queue.js         # /queue — queue display
+│   ├── skip.js          # /skip — skip current song
+│   └── stop.js          # /stop — stop & clear queue
+├── plugins/
+│   └── music-plugin.js  # Custom DisTube plugin (YouTube, Spotify, Apple Music)
+├── utils/
+│   └── theme.js         # Centralized UI theme (colors, icons, embed builders)
+├── deploy-commands.js   # Slash command registration script
+├── main.js              # Bot entry point & DisTube event handlers
+├── package.json
+├── LICENSE
+└── README.md
 ```
+
+## Tech Stack
+
+| Package | Purpose |
+|---------|---------|
+| `discord.js` v14 | Discord API client |
+| `distube` v5 | Music framework |
+| `@distube/yt-dlp` | YouTube & 700+ site extraction |
+| `spotify-url-info` | Spotify metadata (no API key) |
+| `minecraft-server-util` | Minecraft server pings |
+| `@discordjs/voice` + `@discordjs/opus` | Voice connection & audio encoding |
+| `ffmpeg-static` | Bundled FFmpeg binary |
 
 ## License
 

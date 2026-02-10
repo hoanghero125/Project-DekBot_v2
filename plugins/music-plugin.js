@@ -332,7 +332,11 @@ class MusicPlugin extends ExtractorPlugin {
         // Detect YouTube radio/mix playlists (list=RD...) and cap them at 25 tracks.
         // These are auto-generated infinite playlists that can expand to 1000+ entries.
         const isRadio = /[?&]list=RD/.test(url) || /[?&]start_radio=1/.test(url);
-        const flags = { 'flat-playlist': true };
+        const isPlaylist = /[?&]list=/.test(url) || /\/playlist\b/.test(url) || /\/album\b/.test(url) || /\/sets\//.test(url);
+        const flags = {};
+        if (isPlaylist) {
+            flags['flat-playlist'] = true;
+        }
         if (isRadio) {
             flags['playlist-end'] = 25;
             log('yt-dlp', 'Detected YouTube radio/mix — limiting to 25 tracks');

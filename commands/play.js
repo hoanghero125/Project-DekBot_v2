@@ -1,4 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
+const { Icons, errorEmbed, musicEmbed, detectSource } = require('../utils/theme');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -14,11 +15,17 @@ module.exports = {
     async execute(interaction, client) {
         const voiceChannel = interaction.member.voice.channel;
         if (!voiceChannel) {
-            return interaction.reply({ content: 'You must be in a voice channel to use this command!', ephemeral: true });
+            return interaction.reply({ embeds: [errorEmbed('You must be in a voice channel to use this command!')], ephemeral: true });
         }
 
         const query = interaction.options.getString('query');
-        await interaction.reply(`Searching for **${query}**...`);
+        const source = detectSource(query);
+
+        const searchEmbed = musicEmbed()
+            .setDescription(`${Icons.SEARCH}  Searching for **${query}** …`)
+            .setFooter({ text: `${source.icon}  ${source.name}  •  Requested by ${interaction.user.displayName}` });
+
+        await interaction.reply({ embeds: [searchEmbed] });
 
         try {
             await client.distube.play(voiceChannel, query, {
@@ -27,20 +34,28 @@ module.exports = {
             });
         } catch (e) {
             console.error(e);
-            await interaction.followUp({ content: `Could not play: ${e.message}` });
+            await interaction.followUp({ embeds: [errorEmbed(`Could not play: ${e.message}`)] });
         }
     },
 
     async prefixExecute(message, args, client) {
         const voiceChannel = message.member.voice.channel;
         if (!voiceChannel) {
-            return message.channel.send('You must be in a voice channel to use this command!');
+            return message.channel.send({ embeds: [errorEmbed('You must be in a voice channel to use this command!')] });
         }
         if (!args.length) {
-            return message.channel.send('Please provide a song name or URL.');
+            return message.channel.send({ embeds: [errorEmbed('Please provide a song name or URL.')] });
         }
 
         const query = args.join(' ');
+        const source = detectSource(query);
+
+        const searchEmbed = musicEmbed()
+            .setDescription(`${Icons.SEARCH}  Searching for **${query}** …`)
+            .setFooter({ text: `${source.icon}  ${source.name}  •  Requested by ${message.author.displayName}` });
+
+        await message.channel.send({ embeds: [searchEmbed] });
+
         try {
             await client.distube.play(voiceChannel, query, {
                 textChannel: message.channel,
@@ -49,7 +64,7 @@ module.exports = {
             });
         } catch (e) {
             console.error(e);
-            message.channel.send(`Could not play: ${e.message}`);
+            message.channel.send({ embeds: [errorEmbed(`Could not play: ${e.message}`)] });
         }
     },
 };
