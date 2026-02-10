@@ -20,6 +20,11 @@ function log(tag, msg) {
 }
 
 class MusicPlugin extends ExtractorPlugin {
+    constructor() {
+        super();
+        this.distube = null; // Set after DisTube is created
+    }
+
     // --- DisTube interface ---
 
     validate(url) {
@@ -194,34 +199,32 @@ class MusicPlugin extends ExtractorPlugin {
             return this._resolveSpotifyTrack(data, options);
         }
 
-        // Playlist or album
+        // Playlist or album — progressive loading: play first song immediately, load rest in background
         const tracks = data.trackList || [];
         if (!tracks.length) throw new Error(`No tracks found in Spotify ${data.type}: "${data.name}"`);
         log('Spotify', `${data.type}: "${data.name}" (${tracks.length} tracks)`);
 
-        const songs = [];
-        for (let i = 0; i < tracks.length; i++) {
-            const t = tracks[i];
-            const name = t.title || t.name || 'Unknown';
-            const artist = t.subtitle || '';
-            log('Spotify', `  [${i + 1}/${tracks.length}] "${name}" by ${artist}`);
-            try {
-                const ytSong = artist
-                    ? await this._searchBestMatch(artist, name, options)
-                    : await this.searchSong(cleanQuery(name), options);
-                if (ytSong) {
-                    ytSong.name = artist ? `${name} - ${artist}` : name;
-                    songs.push(ytSong);
-                }
-            } catch {
-                log('Spotify', `  [${i + 1}/${tracks.length}] Failed, skipping`);
-            }
+        // Resolve the first track immediately
+        const firstTrack = tracks[0];
+        const firstName = firstTrack.title || firstTrack.name || 'Unknown';
+        const firstArtist = firstTrack.subtitle || '';
+        log('Spotify', `  [1/${tracks.length}] "${firstName}" by ${firstArtist} (priority)`);
+
+        const firstSong = firstArtist
+            ? await this._searchBestMatch(firstArtist, firstName, options)
+            : await this.searchSong(cleanQuery(firstName), options);
+        if (!firstSong) throw new Error(`No YouTube result for first track: ${firstName}`);
+        firstSong.name = firstArtist ? `${firstName} - ${firstArtist}` : firstName;
+
+        // Background-load the remaining tracks
+        if (tracks.length > 1) {
+            this._loadRemainingInBackground('Spotify', tracks.slice(1), tracks.length, options, (t) => ({
+                name: t.title || t.name || 'Unknown',
+                artist: t.subtitle || '',
+            }));
         }
 
-        if (!songs.length) throw new Error('Could not find any tracks from Spotify on YouTube');
-        log('Spotify', `Resolved ${songs.length}/${tracks.length} tracks`);
-
-        return new Playlist({ source: 'spotify', songs, name: data.name || 'Spotify Playlist', url }, options);
+        return firstSong;
     }
 
     async _resolveSpotifyTrack(data, options) {
@@ -278,25 +281,25 @@ class MusicPlugin extends ExtractorPlugin {
         }
 
         if (tracks.length > 1) {
-            // Album
+            // Album — progressive loading: play first song immediately, load rest in background
             const albumName = collection?.collectionName || 'Apple Music Album';
             log('Apple Music', `Album: "${albumName}" (${tracks.length} tracks)`);
-            const songs = [];
-            for (let i = 0; i < tracks.length; i++) {
-                const t = tracks[i];
-                log('Apple Music', `  [${i + 1}/${tracks.length}] "${t.trackName}" by ${t.artistName}`);
-                try {
-                    const ytSong = await this._searchBestMatch(t.artistName, t.trackName, options);
-                    if (ytSong) {
-                        ytSong.name = `${t.trackName} - ${t.artistName}`;
-                        songs.push(ytSong);
-                    }
-                } catch {
-                    log('Apple Music', `  [${i + 1}/${tracks.length}] Failed, skipping`);
-                }
+
+            const firstTrack = tracks[0];
+            log('Apple Music', `  [1/${tracks.length}] "${firstTrack.trackName}" by ${firstTrack.artistName} (priority)`);
+            const firstSong = await this._searchBestMatch(firstTrack.artistName, firstTrack.trackName, options);
+            if (!firstSong) throw new Error(`No YouTube result for first track: ${firstTrack.trackName}`);
+            firstSong.name = `${firstTrack.trackName} - ${firstTrack.artistName}`;
+
+            // Background-load the remaining tracks
+            if (tracks.length > 1) {
+                this._loadRemainingInBackground('Apple Music', tracks.slice(1), tracks.length, options, (t) => ({
+                    name: t.trackName || 'Unknown',
+                    artist: t.artistName || '',
+                }));
             }
-            if (!songs.length) throw new Error('Could not find any Apple Music tracks on YouTube');
-            return new Playlist({ source: 'apple-music', songs, name: albumName, url }, options);
+
+            return firstSong;
         }
 
         // Fallback
@@ -366,6 +369,80 @@ class MusicPlugin extends ExtractorPlugin {
     }
 
     // --- Helpers ---
+
+    /**
+     * Background-loads remaining playlist tracks and adds them to the queue one by one.
+     * This allows the first song to play immediately while the rest load.
+     */
+    _loadRemainingInBackground(source, remainingTracks, totalCount, options, extractInfo) {
+        const distube = this.distube;
+        const member = options?.member;
+        const textChannel = options?.textChannel;
+        const voiceChannel = member?.voice?.channel;
+
+        if (!distube || !voiceChannel) {
+            log(source, 'Cannot background-load: missing distube or voice channel reference');
+            return;
+        }
+
+        const guildId = member.guild.id;
+
+        // Run async without blocking
+        (async () => {
+            let loaded = 0;
+            let failed = 0;
+
+            for (let i = 0; i < remainingTracks.length; i++) {
+                const t = remainingTracks[i];
+                const { name, artist } = extractInfo(t);
+                const idx = i + 2; // +2 because first track was index 1
+                log(source, `  [${idx}/${totalCount}] "${name}" by ${artist}`);
+
+                try {
+                    const ytSong = artist
+                        ? await this._searchBestMatch(artist, name, options)
+                        : await this.searchSong(cleanQuery(name), options);
+
+                    if (ytSong) {
+                        ytSong.name = artist ? `${name} - ${artist}` : name;
+
+                        // Add directly to the queue if it still exists
+                        const queue = distube.getQueue(guildId);
+                        if (queue) {
+                            queue.addToQueue(ytSong);
+                            loaded++;
+                        } else {
+                            // Queue was stopped, play as new queue
+                            await distube.play(voiceChannel, ytSong.url, {
+                                textChannel,
+                                member,
+                            });
+                            loaded++;
+                        }
+                    } else {
+                        failed++;
+                    }
+                } catch (e) {
+                    log(source, `  [${idx}/${totalCount}] Failed: ${e.message}`);
+                    failed++;
+                }
+            }
+
+            log(source, `Background loading complete: ${loaded} loaded, ${failed} failed out of ${remainingTracks.length}`);
+
+            // Send a summary message
+            if (textChannel && loaded > 0) {
+                const { successEmbed, Icons } = require('./utils-bridge');
+                const embed = successEmbed(
+                    `${Icons.PLAYLIST}  Finished loading playlist — **${loaded + 1}** songs queued` +
+                    (failed > 0 ? ` (${failed} failed)` : '')
+                );
+                textChannel.send({ embeds: [embed] }).catch(() => {});
+            }
+        })().catch(e => {
+            log(source, `Background loading error: ${e.message}`);
+        });
+    }
 
     _makeSong(info, options) {
         return new Song(

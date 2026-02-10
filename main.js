@@ -39,12 +39,15 @@ for (const file of commandFiles) {
 }
 
 // DisTube with custom MusicPlugin (handles YouTube, Spotify, Apple Music, SoundCloud, etc.)
+const musicPlugin = new MusicPlugin();
 client.distube = new DisTube(client, {
-    plugins: [new MusicPlugin()],
+    plugins: [musicPlugin],
     emitNewSongOnly: true,
     emitAddSongWhenCreatingQueue: false,
     emitAddListWhenCreatingQueue: false,
 });
+// Give the plugin a reference to DisTube for background playlist loading
+musicPlugin.distube = client.distube;
 
 // DisTube events — rich embed responses
 client.distube
