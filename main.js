@@ -1,13 +1,17 @@
 require('dotenv').config();
 const fs = require('fs');
+const path = require('path');
 const { Client, Collection, GatewayIntentBits, Events, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { DisTube } = require('distube');
 const { MusicPlugin } = require('./plugins/music-plugin');
 const { Icons, Colors, musicEmbed, successEmbed, errorEmbed, infoEmbed, warningEmbed, formatDuration, detectSource, BOT_FOOTER } = require('./utils/theme');
 
+// Point prism-media / @discordjs/voice at the bundled ffmpeg binary
+// so the bot works on machines without ffmpeg on PATH.
+process.env.FFMPEG_PATH = require('ffmpeg-static');
+
 // Ensure yt-dlp binary exists (managed by @distube/yt-dlp package).
 // Only download if missing — avoids EBUSY errors from overwriting a running binary.
-const path = require('path');
 const YTDLP_BIN = path.join(
     path.dirname(require.resolve('@distube/yt-dlp')),
     '..', 'bin',
