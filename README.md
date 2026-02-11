@@ -132,8 +132,8 @@ Project-DekBot_v2/
 | `distube` v5 | Music framework |
 | `@distube/yt-dlp` | YouTube & 700+ site extraction |
 | `spotify-url-info` | Spotify metadata (no API key) |
-| `minecraft-server-util` | Minecraft server pings |
-| `@discordjs/voice` + `@discordjs/opus` | Voice connection & audio encoding |
+| `mcstatus.io` API | Minecraft server pings (via fetch) |
+| `@discordjs/voice` + `opusscript` | Voice connection & audio encoding |
 | `ffmpeg-static` | Bundled FFmpeg binary |
 
 ## License
