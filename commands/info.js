@@ -28,7 +28,7 @@ function buildInfoCard(client) {
 
     const embed = baseEmbed(Colors.PRIMARY)
         .setAuthor({ name: 'About DekBot' })
-        .setTitle(`${Icons.COMMAND}  DekBot v2`)
+        .setTitle(`${Icons.COMMAND}  DekBot [v2]`)
         .setDescription(
             [
                 `A multi-platform music bot built with **discord.js v14** and **DisTube v5**.`,

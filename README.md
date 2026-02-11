@@ -16,7 +16,7 @@ Supports **YouTube**, **Spotify**, **Apple Music**, **SoundCloud**, and [700+ ot
 - Full song names, thumbnails, durations, requester info, and platform icons in all embeds
 
 ### Utilities
-- Minecraft server status lookup with player count bar
+- Minecraft server status lookup with player count bar (via mcstatus.io API)
 - Bot info card with live stats (server count, uptime) and creator portfolio link
 
 ### Bot UX
@@ -79,7 +79,7 @@ yt-dlp is downloaded automatically on first run (managed by `@distube/yt-dlp`).
 | `/stop` | `^stop` | Stop playback and clear the queue |
 | `/queue` | `^queue`, `^q` | Show the current music queue |
 | `/help` | `^help` | List all commands |
-| `/mcsv <ip> <port>` | `^mcsv` | Check a Minecraft server's status |
+| `/mcsv <ip> [port]` | `^mcsv` | Check a Minecraft server's status |
 | `/info` | `^info` | Show bot info, stats, and creator portfolio |
 
 ## How Music Resolution Works
@@ -114,7 +114,8 @@ Project-DekBot_v2/
 │   ├── skip.js          # /skip — skip current song
 │   └── stop.js          # /stop — stop & clear queue
 ├── plugins/
-│   └── music-plugin.js  # Custom DisTube plugin (YouTube, Spotify, Apple Music)
+│   ├── music-plugin.js  # Custom DisTube plugin (YouTube, Spotify, Apple Music)
+│   └── utils-bridge.js  # Bridge for theme utilities in plugin context
 ├── utils/
 │   └── theme.js         # Centralized UI theme (colors, icons, embed builders)
 ├── deploy-commands.js   # Slash command registration script
@@ -132,8 +133,8 @@ Project-DekBot_v2/
 | `distube` v5 | Music framework |
 | `@distube/yt-dlp` | YouTube & 700+ site extraction |
 | `spotify-url-info` | Spotify metadata (no API key) |
-| `minecraft-server-util` | Minecraft server pings |
-| `@discordjs/voice` + `@discordjs/opus` | Voice connection & audio encoding |
+| `mcstatus.io` API | Minecraft server pings (via fetch) |
+| `@discordjs/voice` + `opusscript` | Voice connection & audio encoding |
 | `ffmpeg-static` | Bundled FFmpeg binary |
 
 ## License
